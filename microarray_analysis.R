@@ -14,15 +14,49 @@ raw.data <- read.celfiles(cel.files)
 raw.data
 dim(raw.data)
 
+# Extract the expression matrix
+mat <- exprs(raw.data)
+
 # Distribution of raw probe intensities per CEL file (per array)
+boxplot(mat, main="Raw intensities",
+        col=c(rep("coral", 3), rep("gray", 3)),
+        las = 2,
+        cex.axis = 0.7)
+
+# Microarray raw intensities are usually very skewed, often ranging from 0 to tens of thousands.
+boxplot(log2(mat), main="Raw intensities",
+        col=c(rep("coral", 3), rep("gray", 3)),
+        las = 2,
+        cex.axis = 0.7)
+
+# Alternatively we can also directly plot raw.data
+class(raw.data)
+
+# boxplot() method for ExpressionFeatureSet or ExpressionSet automatically
+# applies a log transformation to make the intensity distribution easier to visualize.
+
 boxplot(raw.data, main="Raw intensities",
         col=c(rep("coral", 3), rep("gray", 3)),
         las = 2,
         cex.axis = 0.7)
 
-# Extract the expression matrix
-mat <- exprs(raw.data)
+# Histograms
 
+hist(mat[,1],
+     breaks = 100,
+     main = colnames(mat)[1],
+     xlab="Intensity",
+     col="skyblue",
+     cex.main = 0.8)
+
+hist(log2(mat[,1]),
+     breaks = 100,
+     main = colnames(mat)[1],
+     xlab="Intensity",
+     col="skyblue",
+     cex.main = 0.8)
+
+# All samples together
 par(mfrow=c(2,3))
 for (i in 1:ncol(mat)) {
   hist(mat[,i],
@@ -32,29 +66,35 @@ for (i in 1:ncol(mat)) {
        col="skyblue",
        cex.main = 0.8)
 }
-
-
-# RMA does three steps: background correction → quantile normalization → probe summarization.
-norm.data <- rma(raw.data)
-
 par(old.par)
-# Distribution of normalized probe intensities per CEL file (per array)
-boxplot(norm.data, main="Normalized intensities",
-        col=c(rep("coral", 3), rep("grey", 3)),
-        las = 3,
-        cex.axis = 0.7)
 
+# rma() stands for Robust Multi-array Average.
+# It does three steps: 
+# 1. Background correction – reduces noise.
+# 2. Quantile normalization – makes distributions across arrays comparable.
+# 3. Probe summarization – takes all the probes belonging to a probe set and
+# combines their intensities into one value per probe set.
+
+norm.data <- rma(raw.data)
+dim(norm.data)
 
 # matrix of normalized expression values
 mat.norm <- exprs(norm.data) 
+
+# Distribution of normalized probe intensities per CEL file (per array)
+boxplot(mat.norm, main="Normalized intensities",
+        col=c(rep("coral", 3), rep("grey", 3)),
+        las = 3,
+        cex.axis = 0.7)
 
 # Run PCA
 pca <- prcomp(t(mat.norm), scale. = TRUE)
 
 # Plot PCA
 short.names <- sub(".CEL$", "", colnames(norm.data))
-short.names <- gsub("tibia_female", "_", short.names)
+short.names <- gsub("tibia_female","", short.names)
 short.names <- gsub("weekold", "w", short.names)
+short.names <- gsub("__", "_", short.names)
 
 plot(pca$x[,1], pca$x[,2],
      pch = 20,
@@ -72,7 +112,7 @@ legend("topright",
        bty = "n",
        cex = 0.7)
 
-text(pca$x[,1], pca$x[,2], labels = short.names, pos = 3, cex = 0.7)
+text(pca$x[,1], pca$x[,2], labels = short.names, pos = 3, cex = 0.6)
 
 # young females are clustered together
 
@@ -82,20 +122,21 @@ hc <- hclust(dist(t(mat.norm)))
 plot(hc, main="Hierarchical Clustering of Samples", 
      xlab="", sub="", cex=0.8)
 
-
-
-group <- factor(c(rep("Young", 3), rep("Old", 3)))
-levels(group)
-
-# Create a design matrix for old vs young
+# Create pheno data for samples
 # Each row = one sample
 # Each column = one experimental group
+pheno.df <- data.frame(
+  sample = colnames(mat.norm),
+  age = factor(c("Young", "Young", "Young", "Old", "Old", "Old"))
+  )
 
-design <- model.matrix(~0 + group)
-colnames(design) <- levels(group)
+# Limma requires a numeric matrix (design) as input for lmFit().
+design <- model.matrix(~0 + age, data = pheno.df)
+colnames(design) <- c(levels(pheno.df$age))
 design
 
 library(limma)
+
 # Fit linear model with limma
 fit <- lmFit(mat.norm, design)
 
@@ -140,35 +181,35 @@ table(duplicated(results.annotated$GeneSymbol))
 
 library(dplyr)
 
+# group_by replace rowname with numbers
+# save the probe ids in a column
 results.annotated$ProbeID <- rownames(results.annotated)
-# this is done because group_by replace rowname with numbers
 
-results.byGene <- results.annotated %>%
-  group_by(GeneSymbol) %>%           # group rows by gene symbol
-  slice_min(P.Value, n = 1)          # pick the row (probe) with the smallest p-value per gene
+results.summarized <- results.annotated %>%
+  group_by(GeneSymbol) %>%          # group rows by gene symbol
+  slice_min(P.Value, n = 1)         # pick one with the smallest p-value per gene
 
-results.byGene <- as.data.frame(results.byGene)
-rownames(results.byGene) <- results.byGene$ProbeID
+class(results.summarized)
 
-dim(results.byGene)
+results.summarized <- as.data.frame(results.summarized)
+rownames(results.summarized) <- results.summarized$ProbeID
 
 #Filter significant genes
-sig.genes <- results.byGene[
-  results.byGene$adj.P.Val < 0.05 & abs(results.byGene$logFC) > 1,
+sig.genes <- results.summarized[
+  results.summarized$adj.P.Val < 0.05 & abs(results.summarized$logFC) > 1,
 ]
 dim(sig.genes) # 0 8
 
-sig.genes <- results.byGene[
-  results.byGene$P.Value < 0.05 & abs(results.byGene$logFC) > 1.5,
+sig.genes <- results.summarized[
+  results.summarized$P.Value < 0.05 & abs(results.summarized$logFC) > 1.5,
 ]
 dim(sig.genes) # 18  8
 
-topgenes <- results.byGene[order(results.byGene$P.Value), ][1:20, ]
-
+top.genes <- results.summarized[order(results.summarized$P.Value), ][1:20, ]
 
 # Create x and y
-x <- results.byGene$logFC
-y <- -log10(results.byGene$P.Val)
+x <- results.summarized$logFC
+y <- -log10(results.summarized$P.Value)
 
 # volcano plot
 plot(x, y,
@@ -176,11 +217,9 @@ plot(x, y,
      col = "grey",
      main="Old vs young females",
      xlab="log2 Fold Change",
-     ylab="-log10(P-value)")
+     ylab="-log10(P value)")
 
-sigs <- results.byGene$P.Value < 0.05 & abs(results.byGene$logFC) > 1.5
-# sum(results.byGene$P.Value < 0.05 & abs(results.byGene$logFC) > 1.5)
-
+sigs <- results.summarized$P.Value < 0.05 & abs(results.summarized$logFC) > 1.5
 points(x[sigs], y[sigs], col="red", pch=20)
 
 legend("bottomleft",                     
@@ -188,16 +227,20 @@ legend("bottomleft",
        col=c("grey", "red"),             
        pch=20,
        bty = "n",
-       y.intersp=0.7)                           
-
+       y.intersp=0.7,
+       cex = 0.8)                           
 
 # Add a column to mark significance
-results.byGene$Significant <- results.byGene$P.Value < 0.05 & abs(results.byGene$logFC) > 1.5
+results.summarized$Gene <- ifelse(
+  results.summarized$P.Value < 0.05 & abs(results.summarized$logFC) > 1.5,
+  "Significant",
+  "Non-significant"
+)
 
 library(ggrepel)
 library(ggplot2)
 
-ggplot(results.byGene, aes(x=logFC, y=-log10(P.Value), color=Significant)) +
+ggplot(results.summarized, aes(x=logFC, y=-log10(P.Value), color=Gene)) +
   geom_point(alpha=0.6) +
   scale_color_manual(values=c("grey", "red")) +
   xlab("log2 Fold Change") +
@@ -206,24 +249,28 @@ ggplot(results.byGene, aes(x=logFC, y=-log10(P.Value), color=Significant)) +
   geom_hline(yintercept=-log10(0.05), linetype="dashed", color="black") +
   geom_vline(xintercept=c(-1,1), linetype="dashed", color="black") +
   geom_text_repel(
-    data = subset(results.byGene, Significant),  # only significant genes
+    data = sig.genes,  # keep rows where SigGene=T
     aes(x = logFC, y = -log10(P.Value), label = GeneSymbol),
     color = "forestgreen",
     size = 3
   ) +
   theme_minimal()
- 
-#==============================
-# in progress
 
-# exprs.data from your normalized data
-exprs.top <- exprs.data[rownames(exprs.data) %in% top.30$ProbeID, ]
+head(top.genes)
 
-probe2gene <- setNames(top.30$GeneSymbol, top.30$ProbeID)
-rownames(exprs.top) <- probe2gene[rownames(exprs.top)]
-dim(exprs.top)
+# Get intensity values for the top 20 genes
+mat.top <- mat.norm[rownames(mat.norm) %in% rownames(top.genes), ]
 
-exprs.scaled <- t(scale(t(exprs.top)))  # scale by row (gene)
+dim(mat.top)
+head(mat.top)
 
-library(pheatmap)
-pheatmap(exprs.scaled)
+heatmap(mat.top, cexRow = 0.7, cexCol=0.7)
+
+colnames(mat.top)
+colnames(mat.top) <- short.names
+
+gene.labels <- top.genes[rownames(mat.top), "GeneSymbol"]
+rownames(mat.top) <- gene.labels
+
+heatmap(mat.top, cexRow = 0.7, cexCol=0.7)
+
