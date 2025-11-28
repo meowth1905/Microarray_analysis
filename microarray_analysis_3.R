@@ -63,7 +63,6 @@ hist(log2(mat[,1]),
      col="skyblue",
      cex.main = 0.8)
 
-
 # rma() stands for Robust Multi-array Average.
 # It does three steps: 
 # 1. Background correction – reduces noise.
@@ -108,7 +107,6 @@ short.names <- gsub("weekold", "w", short.names)
 
 text(pca$x[,1], pca$x[,2], labels = short.names, pos = 3, cex = 0.6)
 
-
 # Perform hierarchical clustering
 hc <- hclust(dist(t(mat.norm)))
 
@@ -147,7 +145,7 @@ fit <- eBayes(fit)
 # limma performs an F-test asking to answer 
 # Is this gene affected by age OR gender (or both)?
 res <- topTable(fit, coef = c("ageYoung", "genderMale"),
-                    adjust.method = "BH", number = Inf)
+                adjust.method = "BH", number = Inf)
 
 head(res)
 
@@ -164,10 +162,10 @@ library(AnnotationDbi)
 columns(clariomsmousetranscriptcluster.db)
 
 res$GeneSymbol <- mapIds(clariomsmousetranscriptcluster.db,
-                             keys=rownames(res),
-                             column="SYMBOL",
-                             keytype="PROBEID",
-                             multiVals="first")
+                         keys=rownames(res),
+                         column="SYMBOL",
+                         keytype="PROBEID",
+                         multiVals="first")
 head(res)
 
 res.annotated <- res[!is.na(res$GeneSymbol), ]
@@ -201,6 +199,24 @@ rownames(res.summarized) <- res.summarized$ProbeID
 sig.genes <- res.summarized[res.summarized$adj.P.Val < 0.05, ]
 dim(sig.genes) 
 
+# Get t-statistics for all genes
+t.stats <- fit$t
+# Get p-values for all genes
+p.values <- fit$p.value
+
+t.coeff <- t.stats[rownames(sig.genes), setdiff(colnames(t.stats), "(Intercept)")]
+
+# for the sig.genes,
+# find the “likely driver” (largest absolute t) among actual coefficients
+driver <- apply(abs(t.coeff), 1, function(x) names(x)[which.max(x)])
+table(driver)
+
+# Out of 21 sig.genes
+# 18  gene’s difference is mostly driven by gender
+# 3  gene’s difference is mostly driven by age
+
+sig.genes$driver <- driver
+
 # Get intensity values for the sig genes
 mat.sig <- mat.norm[rownames(mat.norm) %in% rownames(sig.genes), ]
 dim(mat.sig)
@@ -217,17 +233,16 @@ heatmap(mat.sig, cexRow = 0.7, cexCol=0.7)
 
 #
 #
-
 # Age effect:
 # ageYoung: how much higher or lower Young is compared to Old.
 # genes differentially expressed due to age alone, while controlling for gender in the model.
 res.age <- topTable(fit, coef="ageYoung", adjust.method="BH", number=Inf)
 
 res.age$GeneSymbol <- mapIds(clariomsmousetranscriptcluster.db,
-                         keys=rownames(res.age),
-                         column="SYMBOL",
-                         keytype="PROBEID",
-                         multiVals="first")
+                             keys=rownames(res.age),
+                             column="SYMBOL",
+                             keytype="PROBEID",
+                             multiVals="first")
 head(res.age)
 dim(res.age)
 
@@ -273,10 +288,10 @@ heatmap(mat.age, cexRow = 0.7, cexCol=0.7)
 res.gender <- topTable(fit, coef="genderMale", adjust.method="BH", number=Inf)
 
 res.gender$GeneSymbol <- mapIds(clariomsmousetranscriptcluster.db,
-                             keys=rownames(res.gender),
-                             column="SYMBOL",
-                             keytype="PROBEID",
-                             multiVals="first")
+                                keys=rownames(res.gender),
+                                column="SYMBOL",
+                                keytype="PROBEID",
+                                multiVals="first")
 head(res.gender)
 dim(res.gender)
 
@@ -314,3 +329,6 @@ gene.labels <- gender.genes[rownames(mat.gender), "GeneSymbol"]
 rownames(mat.gender) <- gene.labels
 
 heatmap(mat.gender, cexRow = 0.7, cexCol=0.7)
+
+
+
