@@ -9,7 +9,7 @@ old.par <- par()
 library(oligo)
 
 list.files()
-cel.files <- list.celfiles("Data\\E-MTAB-15951", full.names = TRUE)
+cel.files <- list.celfiles("Data\\female_mouse.data", full.names = TRUE)
 raw.data <- read.celfiles(cel.files)
 raw.data
 dim(raw.data)
