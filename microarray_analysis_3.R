@@ -3,6 +3,11 @@
 # Neethu Raj
 #
 
+# Dataset
+# dataset comprises a bulk transcriptomic profile of bone marrow flush from tibia of C57BL/6N mice.
+# https://www.ebi.ac.uk/biostudies/ArrayExpress/studies/E-MTAB-15951
+#
+
 setwd("C:\\MicroArrayAnalysis")
 old.par <- par()
 
@@ -280,7 +285,48 @@ gene.labels <- age.genes[rownames(mat.age), "GeneSymbol"]
 rownames(mat.age) <- gene.labels
 
 heatmap(mat.age, cexRow = 0.7, cexCol=0.7)
-#
+
+# Pathways enrichment analysis
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+sig.age.genes <- age.genes$GeneSymbol
+
+# Get Entrez IDs
+gene.ids <- bitr(sig.age.genes, fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Mm.eg.db)
+
+# GO enrichment:
+ego <- enrichGO(gene          = gene.ids$ENTREZID,
+                OrgDb         = org.Mm.eg.db,
+                keyType       = "ENTREZID",
+                ont           = "BP",   # or "MF", "CC"
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05)
+
+head(ego, 10)$Description
+
+# top 10 enriched pathways in samples compared to controls
+barplot(ego, showCategory=10) 
+
+
+# KEGG pathway enrichment
+ekegg <- enrichKEGG(gene         = gene.ids$ENTREZID,
+                    organism     = 'mmu',   # 'hsa' for human
+                    pvalueCutoff = 0.05)
+
+barplot(ekegg, showCategory=10) 
+
+# Reactome pathway enrichment 
+# BiocManager::install("ReactomePA")
+library(ReactomePA)
+
+ereact <- enrichPathway(gene         = gene.ids$ENTREZID,
+                        organism     = "mouse",
+                        pvalueCutoff = 0.05)
+
+barplot(ereact, showCategory=10) 
+
 #
 # Gender effect:
 # genderMale: how much higher or lower Male is compared to Female

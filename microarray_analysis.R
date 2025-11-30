@@ -3,6 +3,11 @@
 # Neethu Raj
 #
 
+# Dataset
+# dataset comprises a bulk transcriptomic profile of bone marrow flush from tibia of C57BL/6N mice.
+# https://www.ebi.ac.uk/biostudies/ArrayExpress/studies/E-MTAB-15951
+#
+
 setwd("C:\\MicroArrayAnalysis")
 old.par <- par()
 
