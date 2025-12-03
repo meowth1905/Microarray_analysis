@@ -4,6 +4,9 @@ list.files()
 pheno.data <- read.csv("assig6_data\\arrays.txt", sep = "\t", header = TRUE)
 dim(pheno.data)
 
+# HT: Hypothalamus
+# GF: Gonadal fat
+
 array.data <- read.csv("assig6_data\\arraydata.txt", sep = "\t", header = TRUE)
 dim(array.data)
 
@@ -98,9 +101,18 @@ for (i in rownames(array.norm)){
 }
 results <- as.data.frame(results)
 
-colnames(results) <- c("meanHT","meanGF","sdHT","sdGF","Ttest")
+colnames(results) <- c("meanHT","meanGF","sdHT","sdGF","pValues")
 rownames(results) <- rownames(array.norm)
 
 # p-value < 0.05
 # probe’s intensities are significantly different between HT & GF samples
-results <- cbind(results, significant = results[,"Ttest"] < 0.05)
+results$sig <- results$pValues < 0.05
+
+?p.adjust
+
+results$pAdjusted <- p.adjust(results$pValues, method = "BH")
+results$sigAdjusted <- results$pAdjusted < 0.05
+
+table(results$sig)
+table(results$sigAdjusted)
+
